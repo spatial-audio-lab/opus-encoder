@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Enkoder Opus (wielokanałowy / AmbiX) — Spatial Audio Lab</title>
+<meta name="description" content="Konwersja plików WAV (w tym 4-kanałowego AmbiX FOA) do Opus / WebM w dowolnych parametrach — w przeglądarce, przez WASM libopus." />
+<meta name="theme-color" content="#0A0C08" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Spatial Audio Lab" />
+<meta property="og:title" content="Enkoder Opus (wielokanałowy / AmbiX) — SAL" />
+<meta property="og:description" content="WAV → Opus/WebM w dowolnych parametrach. Poprawny AmbiX FOA (4 kanały) dzięki mapowaniu discrete." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800&family=Azeret+Mono:wght@300;400;500;700&display=swap" rel="stylesheet" />
+
+<style>
+  :root{
+    --black:#0A0C08; --bg2:#12150F; --cream:#F0EBE0; --dim:#9C9890;
+    --cyan:#00E5CC; --amber:#FFAB00; --crimson:#FF3355;
+    --border:rgba(240,235,224,0.08); --border2:rgba(240,235,224,0.14);
+    --display:'Lexend',-apple-system,system-ui,sans-serif;
+    --mono:'Azeret Mono',monospace;
+  }
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+  html,body{min-height:100%;}
+  body{background:var(--black);color:var(--cream);font-family:var(--display);line-height:1.5;}
+  a{color:inherit;}
+
+  /* ── Nagłówek narzędzia (minimalny, wg manifestu §08) ── */
+  .hdr{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    background:var(--black);border-bottom:1px solid var(--border2);padding:16px 24px;position:sticky;top:0;z-index:10;}
+  .hdr-l{display:flex;align-items:center;gap:0;flex-wrap:wrap;}
+  .hub{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:0.72rem;
+    letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);text-decoration:none;
+    border:1px solid var(--border2);padding:8px 14px;min-height:34px;}
+  .hub:hover{color:var(--cyan);border-color:var(--cyan);}
+  .hub svg{width:16px;height:16px;display:block;}
+  .tool-name{font-family:var(--display);font-weight:500;font-size:0.85rem;
+    padding-left:16px;margin-left:16px;border-left:1px solid var(--border2);}
+  .tool-name small{display:block;font-family:var(--mono);font-size:0.62rem;color:var(--dim);letter-spacing:0.04em;text-transform:uppercase;}
+  .status{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:0.68rem;color:var(--dim);letter-spacing:0.03em;}
+  .status .dot{width:8px;height:8px;border-radius:50%;background:var(--dim);}
+  .status.ready .dot{background:var(--cyan);box-shadow:0 0 8px rgba(0,229,204,0.6);}
+  .status.busy .dot{background:var(--amber);box-shadow:0 0 8px rgba(255,171,0,0.6);}
+  .status.err .dot{background:var(--crimson);box-shadow:0 0 8px rgba(255,51,85,0.6);}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:24px;display:grid;grid-template-columns:1.15fr 1fr;gap:24px;align-items:start;}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr;}}
+
+  .panel{background:var(--bg2);border:1px solid var(--border);padding:20px;}
+  .panel + .panel{margin-top:20px;}
+  .sec-title{font-family:var(--mono);font-size:0.66rem;font-weight:500;text-transform:uppercase;
+    letter-spacing:0.14em;color:var(--dim);margin-bottom:14px;}
+  h1,h2{font-family:var(--display);}
+  .lead{font-size:0.95rem;color:var(--cream);}
+  .muted{color:var(--dim);}
+
+  /* ── Dropzone ── */
+  .drop{border:1px dashed var(--border2);background:var(--black);padding:26px 18px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;}
+  .drop:hover,.drop.over{border-color:var(--cyan);background:rgba(0,229,204,0.05);}
+  .drop strong{font-weight:600;}
+  .drop .mono{font-family:var(--mono);font-size:0.72rem;color:var(--dim);margin-top:8px;display:block;}
+
+  .fileinfo{display:none;margin-top:14px;border:1px solid var(--border2);}
+  .fileinfo.show{display:block;}
+  .fileinfo .fname{padding:10px 12px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:0.76rem;word-break:break-all;color:var(--cream);}
+  .kv{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);}
+  .kv div{background:var(--bg2);padding:8px 12px;font-family:var(--mono);font-size:0.72rem;}
+  .kv .k{color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;font-size:0.6rem;}
+  .kv .v{color:var(--cyan);}
+
+  /* ── Kontrolki ── */
+  .ctrl{margin-bottom:18px;}
+  .ctrl:last-child{margin-bottom:0;}
+  label.lab{display:block;font-family:var(--mono);font-size:0.68rem;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--cream);margin-bottom:6px;}
+  .exp{font-family:var(--mono);font-size:0.66rem;color:var(--dim);line-height:1.55;margin-top:6px;}
+  .exp b{color:var(--amber);font-weight:500;}
+
+  select,input[type=number]{width:100%;background:var(--bg2);color:var(--cream);border:1px solid var(--border2);
+    min-height:44px;padding:10px 12px;font-family:var(--mono);font-size:0.8rem;border-radius:0;outline:none;}
+  select option{background:var(--bg2);color:var(--cream);}
+  select:focus,input:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan);}
+  .segs{display:flex;gap:0;border:1px solid var(--border2);}
+  .segs button{flex:1;min-height:44px;background:transparent;color:var(--dim);border:none;border-right:1px solid var(--border2);
+    font-family:var(--mono);font-size:0.72rem;cursor:pointer;padding:8px 4px;}
+  .segs button:last-child{border-right:none;}
+  .segs button[aria-pressed=true]{background:rgba(0,229,204,0.14);color:var(--cyan);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .rangewrap{display:flex;align-items:center;gap:10px;}
+  input[type=range]{flex:1;accent-color:var(--cyan);height:4px;}
+  .val{font-family:var(--mono);font-size:0.78rem;color:var(--cyan);min-width:56px;text-align:right;}
+
+  /* ── Przyciski (manifest §05: ostre krawędzie, 44px) ── */
+  .btn{border-radius:0;min-height:44px;padding:13px 24px;font-family:var(--display);font-weight:600;font-size:0.85rem;cursor:pointer;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;}
+  .btn-primary{background:var(--cyan);color:var(--black);border:none;width:100%;}
+  .btn-primary:hover{opacity:0.85;} .btn-primary:active{opacity:0.7;}
+  .btn-primary:disabled{background:var(--border2);color:var(--dim);cursor:not-allowed;opacity:1;}
+  .btn-ghost{background:transparent;color:var(--dim);border:1px solid var(--border2);font-family:var(--mono);font-weight:500;text-transform:uppercase;font-size:0.72rem;letter-spacing:0.05em;}
+  .btn-ghost:hover{color:var(--cream);border-color:var(--cream);}
+  :focus-visible{outline:2px solid var(--cyan);outline-offset:2px;}
+
+  /* ── Postęp / wynik / błąd ── */
+  .bar{height:4px;background:var(--border);margin-top:14px;overflow:hidden;display:none;}
+  .bar.show{display:block;}
+  .bar > i{display:block;height:100%;width:0;background:var(--amber);transition:width .2s;}
+  .result{display:none;margin-top:16px;border:1px solid var(--cyan);}
+  .result.show{display:block;}
+  .result .top{padding:12px;border-bottom:1px solid var(--border);}
+  .result .top .lab2{font-family:var(--mono);font-size:0.62rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--cyan);}
+  .result .top .fn{font-family:var(--mono);font-size:0.76rem;color:var(--cream);word-break:break-all;margin-top:3px;}
+  .dlrow{display:flex;gap:0;}
+  .dl{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;color:var(--black);background:var(--cyan);font-family:var(--display);font-weight:600;font-size:0.85rem;min-height:48px;}
+  .dl:hover{opacity:0.85;}
+  .cmd{background:var(--black);border:1px solid var(--border2);padding:10px 12px;margin-top:12px;font-family:var(--mono);font-size:0.66rem;color:var(--dim);white-space:pre-wrap;word-break:break-all;}
+  .cmd b{color:var(--cyan);font-weight:400;}
+  .err{display:none;margin-top:14px;border:1px solid var(--crimson);color:var(--crimson);background:rgba(255,51,85,0.06);padding:12px;font-family:var(--mono);font-size:0.72rem;}
+  .err.show{display:block;}
+  .note{border-left:2px solid var(--amber);padding:8px 12px;background:rgba(255,171,0,0.06);font-family:var(--mono);font-size:0.68rem;color:var(--cream);margin-top:12px;}
+  .note.warn{border-color:var(--crimson);background:rgba(255,51,85,0.06);}
+
+  /* ── Wiedza ── */
+  details{border-top:1px solid var(--border);padding:12px 0;}
+  details:first-of-type{border-top:none;}
+  summary{cursor:pointer;font-family:var(--display);font-weight:600;font-size:0.9rem;list-style:none;display:flex;justify-content:space-between;align-items:center;}
+  summary::-webkit-details-marker{display:none;}
+  summary::after{content:"+";font-family:var(--mono);color:var(--cyan);font-size:1.1rem;}
+  details[open] summary::after{content:"–";}
+  details p{font-size:0.85rem;color:var(--dim);margin-top:10px;}
+  details p b{color:var(--cream);font-weight:500;}
+  details code{font-family:var(--mono);font-size:0.78rem;color:var(--amber);background:var(--black);padding:1px 5px;}
+
+  /* ── Stopka KPO (manifest §13: zawsze na białym tle) ── */
+  footer{margin-top:8px;padding:24px;background:#ffffff;color:#111;}
+  footer .kpo{max-width:1180px;margin:0 auto;font-family:var(--mono);font-size:0.7rem;line-height:1.6;}
+  footer .kpo strong{color:#000;}
+  footer .kpo .umowa{color:#444;margin-top:6px;}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-l">
+    <a class="hub" href="https://spatial-audio-lab.github.io/" title="Powrót do Spatial Audio Lab">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      <span>Hub</span>
+    </a>
+    <span class="tool-name">Enkoder Opus<small>Wielokanałowy · AmbiX</small></span>
+  </div>
+  <div class="status" id="status"><span class="dot"></span><span id="statusText">Silnik: nieaktywny</span></div>
+</header>
+
+<div class="wrap">
+
+  <!-- LEWA: wejście + parametry + akcja -->
+  <div>
+    <div class="panel">
+      <div class="sec-title">1 · Plik wejściowy</div>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Wybierz plik WAV">
+        <strong>Upuść plik WAV</strong> albo kliknij, by wybrać
+        <span class="mono">Wielokanałowy WAV — np. 4-kan. AmbiX FOA (W,Y,Z,X). Działa też stereo / mono / HOA.</span>
+      </div>
+      <input type="file" id="file" accept=".wav,audio/wav,audio/x-wav" style="display:none" />
+      <div class="fileinfo" id="fileinfo">
+        <div class="fname" id="fname">—</div>
+        <div class="kv">
+          <div><div class="k">Kanały</div><div class="v" id="i-ch">—</div></div>
+          <div><div class="k">Próbkowanie</div><div class="v" id="i-sr">—</div></div>
+          <div><div class="k">Bitowość / format</div><div class="v" id="i-bd">—</div></div>
+          <div><div class="k">Długość · rozmiar</div><div class="v" id="i-dur">—</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="sec-title">2 · Parametry kodowania Opus</div>
+
+      <div class="ctrl">
+        <label class="lab" for="container">Kontener</label>
+        <select id="container">
+          <option value="opus" selected>.opus (OGG) — zalecane do audio</option>
+          <option value="webm">.webm — do stron / wideo</option>
+        </select>
+        <div class="exp"><b>OGG/.opus</b> ma najlepszą zgodność z narzędziami audio (Reaper, ffmpeg, dekodery ambisoniczne). <b>WebM</b> wybierz, gdy plik ma trafić do wideo lub odtwarzacza w stronie.</div>
+      </div>
+
+      <div class="ctrl">
+        <label class="lab" for="mapping">Mapowanie kanałów (mapping family)</label>
+        <select id="mapping">
+          <option value="255" selected>255 — discrete (bez downmixu) · zalecane dla AmbiX</option>
+          <option value="1">1 — surround (układ głośnikowy)</option>
+          <option value="0">0 — mono/stereo (tylko ≤ 2 kanały)</option>
+        </select>
+        <div class="exp"><b>255 discrete</b> koduje każdy kanał niezależnie — jedyny bezpieczny dla AmbiX: W,Y,Z,X wracają 1:1, bez mieszania. <b>1 surround</b> zakłada rozstawienie głośników (nie dla ambisoniki). <b>0</b> działa tylko dla mono/stereo. Uwaga: natywne mapowanie ambisoniczne Opus (family 2) nie jest wspierane przez ten enkoder — discrete i tak zachowuje wszystkie kanały.</div>
+      </div>
+
+      <div class="row2">
+        <div class="ctrl">
+          <label class="lab" for="bitrate">Bitrate</label>
+          <div class="rangewrap">
+            <input type="range" id="bitrate" min="16" max="510" step="8" value="160" />
+            <span class="val" id="bitrateV">160 k</span>
+          </div>
+          <div class="exp">Docelowa przepływność całości. Dla 4-kan. FOA rozsądnie <b>128–256 k</b>. Wyżej = wierniej, większy plik.</div>
+        </div>
+        <div class="ctrl">
+          <label class="lab" for="complexity">Złożoność (0–10)</label>
+          <div class="rangewrap">
+            <input type="range" id="complexity" min="0" max="10" step="1" value="10" />
+            <span class="val" id="complexityV">10</span>
+          </div>
+          <div class="exp">Wysiłek enkodera. <b>10</b> = najlepsza jakość przy tym bitrate, wolniej. Nie zmienia rozmiaru — tylko jakość i czas.</div>
+        </div>
+      </div>
+
+      <div class="ctrl">
+        <label class="lab">Tryb bitrate</label>
+        <div class="segs" id="vbr" role="group" aria-label="Tryb bitrate">
+          <button data-v="on" aria-pressed="true">VBR</button>
+          <button data-v="constrained" aria-pressed="false">Constrained</button>
+          <button data-v="off" aria-pressed="false">CBR</button>
+        </div>
+        <div class="exp"><b>VBR</b> — bitrate pływa wg złożoności sygnału (najlepszy stosunek jakość/rozmiar). <b>Constrained</b> — VBR z twardym sufitem (do streamingu). <b>CBR</b> — stały bitrate, przewidywalny rozmiar, mniej efektywny.</div>
+      </div>
+
+      <div class="row2">
+        <div class="ctrl">
+          <label class="lab" for="frame">Długość ramki</label>
+          <select id="frame">
+            <option value="2.5">2.5 ms</option>
+            <option value="5">5 ms</option>
+            <option value="10">10 ms</option>
+            <option value="20" selected>20 ms</option>
+            <option value="40">40 ms</option>
+            <option value="60">60 ms</option>
+          </select>
+          <div class="exp">Dłuższa ramka = lepsza kompresja, większe opóźnienie. <b>20 ms</b> to domyślny kompromis.</div>
+        </div>
+        <div class="ctrl">
+          <label class="lab" for="application">Zastosowanie</label>
+          <select id="application">
+            <option value="audio" selected>audio — muzyka / pełne pasmo</option>
+            <option value="voip">voip — mowa</option>
+            <option value="lowdelay">lowdelay — minimalne opóźnienie</option>
+          </select>
+          <div class="exp"><b>audio</b> do materiału dźwiękowego i ambisoniki. voip stroi pod mowę; lowdelay tnie opóźnienie kosztem części predykcji.</div>
+        </div>
+      </div>
+
+      <div class="ctrl">
+        <label class="lab" for="cutoff">Górna granica pasma (cutoff)</label>
+        <select id="cutoff">
+          <option value="0" selected>auto — enkoder dobiera wg bitrate</option>
+          <option value="20000">20 kHz (pełne pasmo)</option>
+          <option value="12000">12 kHz</option>
+          <option value="8000">8 kHz</option>
+          <option value="6000">6 kHz</option>
+          <option value="4000">4 kHz</option>
+        </select>
+        <div class="exp">Obcina najwyższe częstotliwości. <b>auto</b> jest zwykle najlepsze; ręczne obniżenie zmniejsza plik kosztem wysokich tonów.</div>
+      </div>
+
+      <div id="mapWarn" class="note warn" style="display:none">Plik ma więcej niż 2 kanały — mapowanie <b>0</b> jest nieprawidłowe. Ustaw <b>255 (discrete)</b>.</div>
+
+      <button class="btn btn-primary" id="encode" disabled style="margin-top:6px">Koduj do Opus</button>
+      <div class="bar" id="bar"><i id="barFill"></i></div>
+      <div class="err" id="err"></div>
+
+      <div class="result" id="result">
+        <div class="top">
+          <div class="lab2">Wynik</div>
+          <div class="fn" id="outName">—</div>
+        </div>
+        <div class="kv">
+          <div><div class="k">Rozmiar wyjścia</div><div class="v" id="o-size">—</div></div>
+          <div><div class="k">Kompresja</div><div class="v" id="o-ratio">—</div></div>
+        </div>
+        <div class="dlrow"><a class="dl" id="download" href="#" download>Pobierz plik</a></div>
+        <div class="cmd" id="cmd"></div>
+      </div>
+
+      <div class="note">Wyjście 4-kanałowe to <b>B-Format (AmbiX)</b>, nie odsłuch wprost — dekoduj w narzędziu ambisonicznym lub w Ambisonic Web Player SAL. Stereo/mono odtworzysz normalnie.</div>
+    </div>
+  </div>
+
+  <!-- PRAWA: wiedza -->
+  <div class="panel">
+    <div class="sec-title">Co to znaczy? · wiedza</div>
+    <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:6px">Po co ten enkoder</h2>
+    <p class="lead muted" style="font-size:0.86rem;margin-bottom:14px">
+      Przeglądarkowy <span style="font-family:var(--mono);color:var(--cyan)">MediaRecorder</span> koduje Opus najwyżej w 2 kanałach — 4-kanałowy AmbiX schodzi wtedy do stereo (bezużytecznie). Ten enkoder używa <b style="color:var(--cream)">WASM libopus (ffmpeg)</b>, więc zachowuje wszystkie kanały. Konwertuje dowolny wielokanałowy WAV do Opus/WebM z pełną kontrolą parametrów.
+    </p>
+
+    <details open>
+      <summary>Opus — czym jest</summary>
+      <p><b>Opus</b> to nowoczesny, stratny kodek audio (RFC 6716), hybryda SILK (mowa) + CELT (muzyka). Działa wewnętrznie w <code>48 kHz</code>, obsługuje bitrate od kilku do ~510 kb/s i skaluje się od mowy po pełne pasmo. W kontenerze OGG daje pliki <code>.opus</code>.</p>
+    </details>
+    <details>
+      <summary>Ambisonika i AmbiX (FOA)</summary>
+      <p><b>Ambisonika</b> zapisuje całe pole dźwiękowe niezależnie od głośników. <b>FOA</b> (first-order) to 4 kanały: <code>W</code> (dookólny), <code>Y</code> (lewo–prawo), <code>Z</code> (góra–dół), <code>X</code> (przód–tył). <b>AmbiX</b> = kolejność <code>ACN</code> + normalizacja <code>SN3D</code>. Te 4 kanały muszą przejść przez kodek <b>bez mieszania</b> — dlatego mapowanie <b>discrete (255)</b>.</p>
+    </details>
+    <details>
+      <summary>Dlaczego „discrete", a nie downmix</summary>
+      <p>Mapowania 0/1 zakładają relację między kanałami (mono/stereo, głośniki) i potrafią je zmiksować — dla ambisoniki to katastrofa (traci się Z i X albo miesza kierunki). <b>Discrete (255)</b> traktuje każdy kanał jak osobny strumień: po dekodowaniu wracają dokładnie te same 4 kanały. Sprawdzone: 4-kan. WAV → Opus (discrete) → 4-kan. z powrotem.</p>
+    </details>
+    <details>
+      <summary>VBR vs CBR i „złożoność"</summary>
+      <p><b>VBR</b> przydziela bity tam, gdzie sygnał tego wymaga — najlepsza jakość na bit. <b>CBR</b> trzyma stały strumień (przewidywalny rozmiar, np. do transmisji). <b>Constrained VBR</b> to VBR z limitem chwilowym. <b>Złożoność 0–10</b> to nie rozmiar, tylko ile enkoder „myśli": 10 wyciska maksimum jakości przy danym bitrate.</p>
+    </details>
+    <details>
+      <summary>Jak dobrać bitrate dla FOA</summary>
+      <p>Bitrate dotyczy <b>całego</b> pliku (sumy kanałów). Dla 4-kan. FOA: <code>128 k</code> = ekonomicznie, <code>160–192 k</code> = dobry kompromis, <code>256 k+</code> = wiernie do pracy/masteringu. Do archiwum bezstratnego zostań przy WAV — Opus jest stratny.</p>
+    </details>
+    <details>
+      <summary>Silnik i prywatność</summary>
+      <p>Kodowanie dzieje się <b>w Twojej przeglądarce</b> (WASM) — plik nie jest nigdzie wysyłany. Rdzeń ffmpeg (~31 MB) ładuje się raz z CDN przy pierwszym kodowaniu; potem jest w pamięci karty.</p>
+    </details>
+  </div>
+</div>
+
+<footer>
+  <div class="kpo">
+    <strong>Sfinansowano ze środków Krajowego Planu Odbudowy (KPO) · Rzeczpospolita Polska · Sfinansowane przez Unię Europejską — NextGenerationEU.</strong>
+    <div class="umowa">Umowa nr 143/KPO.STYPENDIA/NIMIT/2025 · Spatial Audio Lab</div>
+  </div>
+</footer>
+
+<script>
+/* ═══════════ Konfiguracja silnika (CDN; ?local=1 = pliki lokalne do testów) ═══════════ */
+const P = new URLSearchParams(location.search);
+const CDN = "https://cdn.jsdelivr.net/npm/";
+const FF = P.get("local") ? {
+  ffmpeg:"vendor/ffmpeg.js", util:"vendor/util.js", worker:"vendor/814.ffmpeg.js",
+  coreJs:"vendor/core/ffmpeg-core.js", coreWasm:"vendor/core/ffmpeg-core.wasm"
+} : {
+  ffmpeg: CDN+"@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js",
+  util:   CDN+"@ffmpeg/util@0.12.1/dist/umd/index.js",
+  worker: CDN+"@ffmpeg/ffmpeg@0.12.10/dist/umd/814.ffmpeg.js",
+  coreJs: CDN+"@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+  coreWasm: CDN+"@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm"
+};
+
+const $ = (id) => document.getElementById(id);
+const statusEl = $("status"), statusText = $("statusText");
+function setStatus(cls, text){ statusEl.className = "status " + cls; statusText.textContent = text; }
+
+let ffmpeg = null, ffReady = false, ffLoading = null;
+let currentFile = null, inMeta = null;
+
+/* ── Leniwe ładowanie silnika ── */
+function loadScript(src){
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = res;
+    s.onerror = () => rej(new Error("Nie udało się załadować silnika: " + src));
+    document.head.appendChild(s);
+  });
+}
+async function ensureEngine(){
+  if (ffReady) return;
+  if (ffLoading) return ffLoading;
+  ffLoading = (async () => {
+    setStatus("busy", "Silnik: ładowanie…");
+    if (!window.FFmpegUtil) await loadScript(FF.util);
+    if (!window.FFmpegWASM) await loadScript(FF.ffmpeg);
+    const { FFmpeg } = window.FFmpegWASM;
+    const { toBlobURL } = window.FFmpegUtil;
+    ffmpeg = new FFmpeg();
+    ffmpeg.on("progress", ({ progress }) => {
+      const pct = Math.max(0, Math.min(100, Math.round(progress * 100)));
+      $("barFill").style.width = pct + "%";
+    });
+    await ffmpeg.load({
+      classWorkerURL: await toBlobURL(FF.worker, "text/javascript"),
+      coreURL: await toBlobURL(FF.coreJs, "text/javascript"),
+      wasmURL: await toBlobURL(FF.coreWasm, "application/wasm"),
+    });
+    ffReady = true;
+    setStatus("ready", "Silnik: gotowy");
+  })();
+  return ffLoading;
+}
+
+/* ── Odczyt nagłówka WAV (kanały, próbkowanie, bitowość, długość) ── */
+function parseWav(buf){
+  try{
+    const v = new DataView(buf);
+    const rd = (o,n) => { let s=""; for(let i=0;i<n;i++) s+=String.fromCharCode(v.getUint8(o+i)); return s; };
+    if (rd(0,4)!=="RIFF" || rd(8,4)!=="WAVE") return null;
+    let off=12, fmt=null, dataSize=0;
+    while (off+8 <= v.byteLength){
+      const id=rd(off,4), sz=v.getUint32(off+4,true);
+      if (id==="fmt "){ fmt={ format:v.getUint16(off+8,true), ch:v.getUint16(off+10,true),
+        sr:v.getUint32(off+12,true), bits:v.getUint16(off+22,true) }; }
+      else if (id==="data"){ dataSize=sz; }
+      off += 8 + sz + (sz % 2);
+    }
+    if (!fmt) return null;
+    const blockAlign = fmt.ch * (fmt.bits/8);
+    const dur = (dataSize && blockAlign) ? dataSize/(fmt.sr*blockAlign) : 0;
+    return { ...fmt, dur };
+  }catch(e){ return null; }
+}
+const fmtBytes = (b) => b<1024?`${b} B`:(b<1048576?`${(b/1024).toFixed(0)} kB`:`${(b/1048576).toFixed(2)} MB`);
+const fmtDur = (s) => { if(!s) return "—"; const m=Math.floor(s/60), ss=Math.round(s%60); return `${m}:${String(ss).padStart(2,"0")}`; };
+
+async function onFile(file){
+  if (!file) return;
+  currentFile = file; inMeta = null;
+  $("fname").textContent = file.name;
+  $("fileinfo").classList.add("show");
+  $("result").classList.remove("show");
+  $("err").classList.remove("show");
+  const buf = await file.arrayBuffer();
+  const m = parseWav(buf);
+  inMeta = m ? { ...m, bytes:file.size } : { bytes:file.size };
+  if (m){
+    $("i-ch").textContent = m.ch + (m.ch===4?" (FOA?)":"");
+    $("i-sr").textContent = (m.sr/1000).toFixed(m.sr%1000?1:0) + " kHz";
+    $("i-bd").textContent = m.bits + "-bit " + (m.format===3?"float":"PCM");
+    $("i-dur").textContent = fmtDur(m.dur) + " · " + fmtBytes(file.size);
+  } else {
+    $("i-ch").textContent = "?"; $("i-sr").textContent="?"; $("i-bd").textContent = "nie-WAV?"; $("i-dur").textContent = fmtBytes(file.size);
+  }
+  checkMapping();
+  $("encode").disabled = false;
+  // Rozgrzej silnik w tle
+  ensureEngine().catch(showErr);
+}
+
+function checkMapping(){
+  const ch = inMeta?.ch || 0;
+  const mf = $("mapping").value;
+  $("mapWarn").style.display = (ch>2 && mf==="0") ? "block" : "none";
+}
+
+/* ── Budowa argumentów ffmpeg ── */
+function buildArgs(){
+  const container = $("container").value;           // opus | webm
+  const mf = $("mapping").value;
+  const br = parseInt($("bitrate").value,10);
+  const vbr = document.querySelector('#vbr button[aria-pressed=true]').dataset.v;
+  const cl = $("complexity").value;
+  const frame = $("frame").value;
+  const app = $("application").value;
+  const cutoff = $("cutoff").value;
+  const outName = "out." + container;
+  const a = ["-i","in.wav","-c:a","libopus","-mapping_family",mf,"-b:a",br+"k",
+             "-vbr",vbr,"-compression_level",cl,"-frame_duration",frame,"-application",app];
+  if (cutoff!=="0"){ a.push("-cutoff",cutoff); }
+  a.push("-f", container==="webm"?"webm":"opus", outName);
+  return { args:a, outName, container, br };
+}
+
+function showErr(e){
+  console.error(e);
+  setStatus("err","Silnik: błąd");
+  $("err").textContent = (e && e.message) ? e.message : String(e);
+  $("err").classList.add("show");
+  $("bar").classList.remove("show");
+}
+
+async function encode(){
+  if (!currentFile) return;
+  const ch = inMeta?.ch || 0;
+  if (ch>2 && $("mapping").value==="0"){ showErr(new Error("Mapowanie 0 nie obsługuje >2 kanałów. Wybierz 255 (discrete).")); return; }
+  $("err").classList.remove("show");
+  $("result").classList.remove("show");
+  $("encode").disabled = true;
+  $("bar").classList.add("show"); $("barFill").style.width="0%";
+  try{
+    await ensureEngine();
+    setStatus("busy","Silnik: koduję…");
+    const { toBlobURL, fetchFile } = window.FFmpegUtil;
+    const { args, outName, container, br } = buildArgs();
+    await ffmpeg.writeFile("in.wav", await fetchFile(currentFile));
+    await ffmpeg.exec(args);
+    const data = await ffmpeg.readFile(outName);
+    const blob = new Blob([data.buffer], { type: container==="webm"?"audio/webm":"audio/ogg" });
+    // Nazwa pliku wyjściowego na podstawie wejścia
+    const stem = (currentFile.name.replace(/\.[^.]+$/,"")) || "audio";
+    const ext = container==="webm"?"webm":"opus";
+    const outFile = `${stem}_opus-${br}k.${ext}`;
+    const url = URL.createObjectURL(blob);
+    $("outName").textContent = outFile;
+    $("o-size").textContent = fmtBytes(blob.size);
+    $("o-ratio").textContent = inMeta?.bytes ? (inMeta.bytes/blob.size).toFixed(1)+"×  mniejszy" : "—";
+    const dl = $("download"); dl.href = url; dl.download = outFile;
+    $("cmd").innerHTML = "<b>ffmpeg</b> " + args.join(" ").replace("in.wav", stem+".wav").replace(/out\.\w+/, outFile);
+    $("result").classList.add("show");
+    setStatus("ready","Silnik: gotowy");
+  }catch(e){ showErr(e); }
+  finally{
+    $("encode").disabled = false;
+    setTimeout(()=>$("bar").classList.remove("show"), 600);
+  }
+}
+
+/* ── Zdarzenia ── */
+$("drop").addEventListener("click", ()=>$("file").click());
+$("drop").addEventListener("keydown", (e)=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); $("file").click(); }});
+$("file").addEventListener("change", (e)=>onFile(e.target.files[0]));
+["dragenter","dragover"].forEach(ev=>$("drop").addEventListener(ev,(e)=>{e.preventDefault();$("drop").classList.add("over");}));
+["dragleave","drop"].forEach(ev=>$("drop").addEventListener(ev,(e)=>{e.preventDefault();$("drop").classList.remove("over");}));
+$("drop").addEventListener("drop",(e)=>{ const f=e.dataTransfer.files[0]; if(f) onFile(f); });
+$("bitrate").addEventListener("input",(e)=>$("bitrateV").textContent=e.target.value+" k");
+$("complexity").addEventListener("input",(e)=>$("complexityV").textContent=e.target.value);
+$("mapping").addEventListener("change", checkMapping);
+document.querySelectorAll('#vbr button').forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll('#vbr button').forEach(x=>x.setAttribute("aria-pressed","false"));
+  b.setAttribute("aria-pressed","true");
+}));
+$("encode").addEventListener("click", encode);
+setStatus("", "Silnik: nieaktywny (załaduje się przy pierwszym pliku)");
+</script>
+</body>
+</html>

@@ -337,8 +337,12 @@ const FF = P.get("local") ? {
   ffmpeg: CDN+"@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js",
   util:   CDN+"@ffmpeg/util@0.12.1/dist/umd/index.js",
   worker: CDN+"@ffmpeg/ffmpeg@0.12.10/dist/umd/814.ffmpeg.js",
-  coreJs: CDN+"@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
-  coreWasm: CDN+"@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm"
+  // Rdzeń MUSI być z /esm/: przekazanie classWorkerURL tworzy worker typu "module",
+  // w którym importScripts nie istnieje — ffmpeg spada wtedy na dynamiczny import(),
+  // a ten wymaga `export default` (ma go tylko build ESM, nie UMD). Użycie UMD tutaj
+  // daje błąd "failed to import ffmpeg-core.js".
+  coreJs: CDN+"@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.js",
+  coreWasm: CDN+"@ffmpeg/core@0.12.6/dist/esm/ffmpeg-core.wasm"
 };
 
 const $ = (id) => document.getElementById(id);

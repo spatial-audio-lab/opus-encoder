@@ -499,15 +499,31 @@
 </head>
 <body>
 
-<header class="hdr">
-  <div class="hdr-l">
-    <a class="hub" href="https://spatial-audio-lab.github.io/" title="Powrót do Spatial Audio Lab">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-      <span>Hub</span>
+<header class="sal-bar" id="salBar">
+  <div class="sal-bar-left">
+    <a href="https://spatial-audio-lab.github.io/" class="sal-pill" title="Powrót do Hubu (Spatial Audio Lab)">
+      <img src="assets/brand/mark-cream-1024.png" alt="" class="sal-pill-mark" />
+      <span class="sal-pill-text">SA<span class="sal-acid">L</span></span>
     </a>
-    <span class="tool-name">Enkoder Opus<small>Wielokanałowy · AmbiX</small></span>
+    <span class="sal-sep"></span>
+    <span class="sal-status-dot" id="salStatusDot" title="Status silnika enkodera"></span>
+    <span class="sal-name-wrap">
+      <span class="sal-name">Enkoder Opus</span>
+      <span class="sal-sep sal-sep--inline"></span>
+      <span class="sal-desc">Wielokanałowy · AmbiX</span>
+    </span>
   </div>
-  <div class="status" id="status"><span class="dot"></span><span id="statusText">Silnik: nieaktywny</span></div>
+  <nav class="sal-tabs" id="salTabs" aria-label="Nawigacja narzędzia">
+    <a href="#" class="sal-tab" data-tab="pomoc" data-modal="modalPomoc">Pomoc</a>
+    <a href="#" class="sal-tab" data-tab="o-projekcie" data-modal="modalOProjekcie">O projekcie</a>
+  </nav>
+  <button class="sal-burger" id="salBurger" aria-label="Menu" aria-expanded="false">
+    <span></span><span></span><span></span>
+  </button>
+  <nav class="sal-mobile-menu" id="salMobileMenu" aria-label="Nawigacja narzędzia (mobile)">
+    <a href="#" class="sal-tab" data-tab="pomoc" data-modal="modalPomoc">Pomoc</a>
+    <a href="#" class="sal-tab" data-tab="o-projekcie" data-modal="modalOProjekcie">O projekcie</a>
+  </nav>
 </header>
 
 <div class="wrap">
@@ -623,6 +639,10 @@
       <div id="mapWarn" class="note warn" style="display:none">Plik ma więcej niż 2 kanały — mapowanie <b>0</b> jest nieprawidłowe. Ustaw <b>255 (discrete)</b>.</div>
 
       <button class="btn btn-primary" id="encode" disabled style="margin-top:6px">Koduj do Opus</button>
+      <div class="engine-status" id="engineStatus">
+        <span class="engine-status-dot"></span>
+        <span id="statusText">Silnik: nieaktywny (załaduje się przy pierwszym pliku)</span>
+      </div>
       <div class="bar" id="bar"><i id="barFill"></i></div>
       <div class="err" id="err"></div>
 
@@ -678,21 +698,77 @@
   </div>
 </div>
 
-<footer>
-  <div class="kpo">
-    <div style="margin-bottom:14px;max-width:440px;">
-      <img src="assets/kpo/KPO.jpg" alt="Logotypy Krajowy Plan Odbudowy, flaga Rzeczypospolitej Polskiej, napis Sfinansowane przez Unię Europejską NextGenerationEU oraz flaga Unii Europejskiej" style="width:100%;height:auto;display:block;" />
+<!-- Modale SAL -->
+<div class="sal-modal-overlay" id="modalPomoc" aria-hidden="true">
+  <div class="sal-modal" role="dialog" aria-modal="true" aria-labelledby="modalPomocTitle">
+    <button type="button" class="sal-modal-close" data-close-modal aria-label="Zamknij">✕</button>
+    <h2 id="modalPomocTitle" class="sal-modal-h2">Pomoc</h2>
+
+    <h3 class="sal-modal-h3">Co robi Enkoder Opus</h3>
+    <p>
+      Narzędzie konwertuje pliki WAV (w tym 4-kanałowy format ambisoniczny AmbiX FOA) do skompresowanego formatu Opus (w kontenerze <code>.opus</code> lub <code>.webm</code>) bezpośrednio w Twojej przeglądarce, wykorzystując bibliotekę libopus skompilowaną do WebAssembly (WASM).
+    </p>
+
+    <h3 class="sal-modal-h3">Ambisonika i mapowanie discrete (255)</h3>
+    <p>
+      Standardowe enkodery łączą kanały wielokanałowe do stereo lub 5.1, co niszczy relacje przestrzenne FOA (kanały W, Y, Z, X). <b>Discrete (255)</b> traktuje każdy kanał jak całkowicie niezależny strumień: po dekodowaniu wracają dokładnie te same 4 kanały pola ambisonicznego bez żadnego miksowania.
+    </p>
+
+    <h3 class="sal-modal-h3">Zalecane parametry</h3>
+    <ul class="sal-modal-list">
+      <li><b>128 kb/s</b> — ekonomiczny odsłuch roboczy,</li>
+      <li><b>160–192 kb/s</b> — optymalny kompromis jakości do rozmiaru dla 4-kanałowego AmbiX,</li>
+      <li><b>256+ kb/s</b> — wysoka wierność, mastering i archiwizacja.</li>
+    </ul>
+
+    <h3 class="sal-modal-h3">Prywatność i przetwarzanie</h3>
+    <p>
+      Kodowanie odbywa się w 100% lokalnie w Twojej przeglądarce. Żadne pliki audio nie są przesyłane przez sieć ani na zewnętrzny serwer.
+    </p>
+  </div>
+</div>
+
+<div class="sal-modal-overlay" id="modalOProjekcie" aria-hidden="true">
+  <div class="sal-modal" role="dialog" aria-modal="true" aria-labelledby="modalOProjekcieTitle">
+    <button type="button" class="sal-modal-close" data-close-modal aria-label="Zamknij">✕</button>
+    <h2 id="modalOProjekcieTitle" class="sal-modal-h2">O projekcie</h2>
+
+    <h3 class="sal-modal-h3">Spatial Audio Lab</h3>
+    <p>
+      Projekt stypendialny skupiony na tworzeniu profesjonalnego archiwum dźwięku przestrzennego. W ramach działań powstaje baza nagrań w technologii Virtual Reality (VR), która łączy nowoczesną inżynierię dźwięku z edukacją teatralną i technikami uważności.
+    </p>
+
+    <h3 class="sal-modal-h3">Metadane</h3>
+    <dl class="sal-modal-meta">
+      <div><dt>Stypendysta</dt><dd>Oskar Hamerski · Spatial Audio Lab</dd></div>
+      <div><dt>Program</dt><dd>Stypendia KPO — Narodowy Instytut Muzyki i Tańca (NIMiT)</dd></div>
+      <div><dt>Umowa</dt><dd>143/KPO.STYPENDIA/NIMIT/2025</dd></div>
+      <div><dt>Dofinansowanie UE</dt><dd>36 000,00 zł brutto (NextGenerationEU)</dd></div>
+      <div><dt>Technologia</dt><dd>WASM libopus (ffmpeg.wasm) · Web Audio API · Ambisonics FOA</dd></div>
+    </dl>
+
+    <h3 class="sal-modal-h3">Finansowanie</h3>
+    <p>
+      Projekt sfinansowany przez Unię Europejską — NextGenerationEU. Wsparcie w ramach Krajowego Planu Odbudowy i Zwiększania Odporności, Inwestycja A2.5.1: Program wspierania działalności podmiotów sektora kultury i przemysłów kreatywnych na rzecz stymulowania ich rozwoju. Instytucja Wspierająca: Narodowy Instytut Muzyki i Tańca.
+    </p>
+
+    <div class="sal-kpo-strip">
+      <img src="assets/kpo/KPO.jpg" alt="Logotypy: Krajowy Plan Odbudowy, Rzeczpospolita Polska, Sfinansowane przez Unię Europejską NextGenerationEU" />
     </div>
-    <strong>Projekt sfinansowany przez Unię Europejską — NextGenerationEU.</strong>
-    <div class="umowa" style="line-height:1.6;margin-top:6px;">
-      Wsparcie w ramach Krajowego Planu Odbudowy i Zwiększania Odporności, Inwestycja A2.5.1: Program wspierania działalności podmiotów sektora kultury i przemysłów kreatywnych na rzecz stymulowania ich rozwoju.<br>
-      Instytucja Wspierająca: Narodowy Instytut Muzyki i Tańca (NIMiT) · Umowa nr <strong>143/KPO.STYPENDIA/NIMIT/2025</strong> · Stypendysta: <strong>Oskar Hamerski</strong> · Wartość dofinansowania: <strong>36 000,00 zł brutto</strong>
-    </div>
-    <div style="margin-top:10px;">
-      <a href="https://spatial-audio-lab.github.io/o-projekcie/" target="_blank" rel="noopener" style="color:#007a68;font-weight:600;text-decoration:underline;">
+
+    <p>
+      <a href="https://spatial-audio-lab.github.io/o-projekcie/" class="sal-modal-link" target="_blank" rel="noopener">
         Pełne informacje o projekcie (wskaźniki, certyfikaty, kontakt) ↗
       </a>
-    </div>
+    </p>
+  </div>
+</div>
+
+<footer class="sal-footer">
+  <div class="sal-footer-inner">
+    <span>Spatial Audio Lab · Enkoder Opus</span>
+    <span class="sal-sep sal-sep--inline"></span>
+    <a href="#" data-tab="o-projekcie" data-modal="modalOProjekcie" style="color:var(--dim);text-decoration:none;">Informacja o finansowaniu KPO</a>
   </div>
 </footer>
 
@@ -716,8 +792,21 @@ const FF = P.get("local") ? {
 };
 
 const $ = (id) => document.getElementById(id);
-const statusEl = $("status"), statusText = $("statusText");
-function setStatus(cls, text){ statusEl.className = "status " + cls; statusText.textContent = text; }
+const statusText = $("statusText");
+function setStatus(cls, text){
+  const eng = $("engineStatus");
+  if (eng) eng.className = "engine-status " + cls;
+  if (statusText) statusText.textContent = text;
+  const dot = $("salStatusDot");
+  const bar = $("salBar");
+  if (dot) {
+    dot.classList.toggle("is-playing", cls === "busy");
+    dot.classList.toggle("is-ready", cls === "ready");
+  }
+  if (bar) {
+    bar.classList.toggle("is-playing", cls === "busy");
+  }
+}
 
 let ffmpeg = null, ffReady = false, ffLoading = null;
 let currentFile = null, inMeta = null;
@@ -887,6 +976,59 @@ document.querySelectorAll('#vbr button').forEach(b=>b.addEventListener("click",(
 }));
 $("encode").addEventListener("click", encode);
 setStatus("", "Silnik: nieaktywny (załaduje się przy pierwszym pliku)");
+
+/* ── Obsługa paska marki i modali (SAL v3.1) ── */
+let lastFocusedTrigger = null;
+function openModal(modal, trigger){
+  if (!modal) return;
+  lastFocusedTrigger = trigger || document.activeElement;
+  modal.classList.add('is-open');
+  modal.setAttribute('aria-hidden', 'false');
+  const closeBtn = modal.querySelector('[data-close-modal]');
+  if (closeBtn) closeBtn.focus();
+}
+function closeModal(modal){
+  if (!modal || !modal.classList.contains('is-open')) return;
+  modal.classList.remove('is-open');
+  modal.setAttribute('aria-hidden', 'true');
+  if (lastFocusedTrigger && typeof lastFocusedTrigger.focus === 'function') {
+    lastFocusedTrigger.focus();
+  }
+}
+function closeAllModals(){
+  document.querySelectorAll('.sal-modal-overlay.is-open').forEach(closeModal);
+}
+
+const burger = $("salBurger");
+const mobileMenu = $("salMobileMenu");
+if (burger && mobileMenu) {
+  burger.addEventListener("click", () => {
+    const open = mobileMenu.classList.toggle("is-open");
+    burger.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+}
+document.querySelectorAll("[data-tab]").forEach((el) => {
+  el.addEventListener("click", (e) => {
+    const modalId = el.getAttribute("data-modal");
+    if (modalId) {
+      e.preventDefault();
+      openModal($(modalId), el);
+    }
+    if (mobileMenu) mobileMenu.classList.remove("is-open");
+    if (burger) burger.setAttribute("aria-expanded", "false");
+  });
+});
+document.querySelectorAll(".sal-modal-overlay").forEach((overlay) => {
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeModal(overlay);
+  });
+  overlay.querySelectorAll("[data-close-modal]").forEach((btn) => {
+    btn.addEventListener("click", () => closeModal(overlay));
+  });
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeAllModals();
+});
 </script>
 </body>
 </html>

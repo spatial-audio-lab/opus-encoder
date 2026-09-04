@@ -11,6 +11,10 @@
 <meta property="og:title" content="Enkoder Opus (wielokanałowy / AmbiX) — SAL" />
 <meta property="og:description" content="WAV → Opus/WebM w dowolnych parametrach. Poprawny AmbiX FOA (4 kanały) dzięki mapowaniu discrete." />
 
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="alternate icon" href="favicon.ico" />
+<link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
+
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800&family=Azeret+Mono:wght@300;400;500;700&display=swap" rel="stylesheet" />
@@ -18,7 +22,7 @@
 <style>
   :root{
     --black:#0A0C08; --bg2:#12150F; --cream:#F0EBE0; --dim:#9C9890;
-    --cyan:#00E5CC; --amber:#FFAB00; --crimson:#FF3355;
+    --cyan:#00E5CC; --amber:#FFAB00; --crimson:#FF3355; --acid:#BEFF00;
     --border:rgba(240,235,224,0.08); --border2:rgba(240,235,224,0.14);
     --display:'Lexend',-apple-system,system-ui,sans-serif;
     --mono:'Azeret Mono',monospace;
@@ -28,23 +32,378 @@
   body{background:var(--black);color:var(--cream);font-family:var(--display);line-height:1.5;}
   a{color:inherit;}
 
-  /* ── Nagłówek narzędzia (minimalny, wg manifestu §08) ── */
-  .hdr{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
-    background:var(--black);border-bottom:1px solid var(--border2);padding:16px 24px;position:sticky;top:0;z-index:10;}
-  .hdr-l{display:flex;align-items:center;gap:0;flex-wrap:wrap;}
-  .hub{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:0.72rem;
-    letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);text-decoration:none;
-    border:1px solid var(--border2);padding:8px 14px;min-height:34px;}
-  .hub:hover{color:var(--cyan);border-color:var(--cyan);}
-  .hub svg{width:16px;height:16px;display:block;}
-  .tool-name{font-family:var(--display);font-weight:500;font-size:0.85rem;
-    padding-left:16px;margin-left:16px;border-left:1px solid var(--border2);}
-  .tool-name small{display:block;font-family:var(--mono);font-size:0.62rem;color:var(--dim);letter-spacing:0.04em;text-transform:uppercase;}
-  .status{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:0.68rem;color:var(--dim);letter-spacing:0.03em;}
-  .status .dot{width:8px;height:8px;border-radius:50%;background:var(--dim);}
-  .status.ready .dot{background:var(--cyan);box-shadow:0 0 8px rgba(0,229,204,0.6);}
-  .status.busy .dot{background:var(--amber);box-shadow:0 0 8px rgba(255,171,0,0.6);}
-  .status.err .dot{background:var(--crimson);box-shadow:0 0 8px rgba(255,51,85,0.6);}
+  /* ── Pasek marki SAL v3.1 ── */
+  @keyframes salPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.55; transform: scale(0.82); }
+  }
+  @keyframes salRing {
+    0% { opacity: 0.55; transform: scale(1); }
+    100% { opacity: 0; transform: scale(2.6); }
+  }
+  .sal-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
+    height: 68px;
+    padding: 0 20px;
+    background: #0a0c08;
+    border-bottom: 1px solid rgba(240, 235, 224, 0.14);
+    font-family: var(--display);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    transition: box-shadow 0.2s ease;
+  }
+  .sal-bar.is-playing {
+    box-shadow: inset 0 -1px 0 rgba(190, 255, 0, 0.1);
+  }
+  .sal-bar-left {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+  }
+  .sal-pill {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 7px 14px 7px 9px;
+    border: 1px solid rgba(240, 235, 224, 0.14);
+    text-decoration: none;
+    flex: none;
+    transition: border-color 0.2s ease;
+  }
+  .sal-pill:hover {
+    border-color: rgba(240, 235, 224, 0.35);
+  }
+  .sal-pill-mark {
+    height: 38px;
+    width: auto;
+    display: block;
+  }
+  .sal-pill-text {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    color: #f0ebe0;
+  }
+  .sal-acid {
+    color: var(--acid);
+  }
+  .sal-sep {
+    width: 1px;
+    height: 34px;
+    background: rgba(240, 235, 224, 0.14);
+    margin: 0 20px;
+    flex: none;
+  }
+  .sal-sep--inline {
+    height: 20px;
+    margin: 0 18px;
+  }
+  .sal-status-dot {
+    position: relative;
+    width: 11px;
+    height: 11px;
+    flex: none;
+    margin-right: 16px;
+    border-radius: 50%;
+    background: rgba(240, 235, 224, 0.18);
+    border: 1px solid rgba(240, 235, 224, 0.28);
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+  .sal-status-dot.is-ready {
+    background: rgba(0, 229, 204, 0.5);
+    border-color: var(--cyan);
+  }
+  .sal-status-dot.is-playing {
+    background: #00e5cc;
+    border: none;
+    animation: salPulse 1.5s ease-in-out infinite;
+  }
+  .sal-status-dot.is-playing::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border: 1px solid #00e5cc;
+    border-radius: 50%;
+    animation: salRing 1.5s ease-out infinite;
+  }
+  .sal-name-wrap {
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
+  }
+  .sal-name {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #f0ebe0;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .sal-desc {
+    font-size: 15px;
+    font-weight: 300;
+    color: #9c9890;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sal-tabs {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    flex: none;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .sal-tab {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    color: #9c9890;
+    text-decoration: none;
+    transition: color 0.15s ease;
+    cursor: pointer;
+  }
+  .sal-tab:hover {
+    color: #f0ebe0;
+  }
+  .sal-tab.is-active {
+    color: var(--acid);
+    box-shadow: inset 0 -2px 0 var(--acid);
+  }
+  .sal-burger {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    width: 36px;
+    height: 36px;
+    padding: 6px;
+    background: transparent;
+    border: 1px solid rgba(240, 235, 224, 0.14);
+    cursor: pointer;
+    align-self: center;
+    flex: none;
+  }
+  .sal-burger span {
+    display: block;
+    width: 18px;
+    height: 1.5px;
+    background: #f0ebe0;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+  .sal-mobile-menu {
+    display: none;
+  }
+
+  /* Status silnika wewnątrz panelu */
+  .engine-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--dim);
+    letter-spacing: 0.03em;
+    margin-top: 12px;
+  }
+  .engine-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--dim);
+    flex: none;
+  }
+  .engine-status.ready .engine-status-dot {
+    background: var(--cyan);
+    box-shadow: 0 0 8px rgba(0, 229, 204, 0.6);
+  }
+  .engine-status.busy .engine-status-dot {
+    background: var(--amber);
+    box-shadow: 0 0 8px rgba(255, 171, 0, 0.6);
+  }
+  .engine-status.err .engine-status-dot {
+    background: var(--crimson);
+    box-shadow: 0 0 8px rgba(255, 51, 85, 0.6);
+  }
+
+  /* Modale SAL */
+  .sal-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 8, 0.82);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 60;
+    padding: 5vh 24px;
+    overflow-y: auto;
+  }
+  .sal-modal-overlay.is-open {
+    display: flex;
+  }
+  .sal-modal {
+    position: relative;
+    background: #12150f;
+    border: 1px solid rgba(240, 235, 224, 0.14);
+    border-radius: 0;
+    max-width: 640px;
+    width: 100%;
+    padding: 40px;
+  }
+  .sal-modal-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid rgba(240, 235, 224, 0.14);
+    color: #9c9890;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  .sal-modal-close:hover {
+    color: #f0ebe0;
+    border-color: #00e5cc;
+  }
+  .sal-modal-h2 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 1.4rem;
+    color: #f0ebe0;
+    margin-bottom: 24px;
+  }
+  .sal-modal-h3 {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 0.72rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #00e5cc;
+    margin: 24px 0 12px;
+  }
+  .sal-modal-h2 + .sal-modal-h3 { margin-top: 0; }
+  .sal-modal p {
+    font-family: var(--display);
+    font-size: 0.85rem;
+    line-height: 1.75;
+    color: #c9c4b8;
+    margin: 0 0 16px;
+  }
+  .sal-modal p:last-child { margin-bottom: 0; }
+  .sal-modal-list {
+    font-family: var(--display);
+    font-size: 0.85rem;
+    line-height: 1.9;
+    color: #c9c4b8;
+    padding-left: 1.3em;
+    margin-bottom: 16px;
+  }
+  .sal-modal-list li { margin-bottom: 6px; }
+  .sal-modal-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    margin-bottom: 16px;
+  }
+  .sal-modal-meta > div {
+    display: flex;
+    gap: 16px;
+    border-bottom: 1px solid rgba(240, 235, 224, 0.08);
+    padding-bottom: 8px;
+  }
+  .sal-modal-meta dt {
+    color: #9c9890;
+    min-width: 130px;
+    flex: none;
+  }
+  .sal-modal-meta dd {
+    color: #f0ebe0;
+    margin: 0;
+  }
+  .sal-kpo-strip {
+    background: #fff;
+    padding: 16px;
+    margin: 20px 0;
+  }
+  .sal-kpo-strip img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .sal-modal-link {
+    color: #00e5cc;
+    text-decoration: underline;
+    font-size: 0.85rem;
+  }
+  .sal-modal-link:hover { color: #f0ebe0; }
+
+  .sal-footer {
+    margin-top: 40px;
+    border-top: 1px solid var(--border);
+    padding: 24px;
+    background: var(--black);
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+  }
+  .sal-footer-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 600px) {
+    .sal-bar { height: 60px; padding: 0 12px; }
+    .sal-pill { padding: 5px 10px 5px 6px; gap: 8px; }
+    .sal-pill-mark { height: 30px; }
+    .sal-pill-text { font-size: 15px; }
+    .sal-sep { margin: 0 11px; }
+    .sal-status-dot { width: 9px; height: 9px; margin-right: 10px; }
+    .sal-name-wrap { flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; flex: 1; }
+    .sal-name { font-size: 16px; }
+    .sal-desc { font-size: 11.5px; max-width: 100%; }
+    .sal-sep--inline { display: none; }
+    .sal-tabs { display: none; }
+    .sal-burger { display: flex; }
+    .sal-mobile-menu.is-open {
+      display: flex;
+      flex-direction: column;
+      position: absolute;
+      top: 60px;
+      left: 0;
+      right: 0;
+      z-index: 50;
+      background: #0a0c08;
+      border-bottom: 1px solid rgba(240, 235, 224, 0.14);
+      padding: 8px 12px 14px;
+      gap: 4px;
+    }
+    .sal-mobile-menu .sal-tab {
+      padding: 10px 4px;
+      border-bottom: 1px solid rgba(240, 235, 224, 0.08);
+    }
+    .sal-modal { padding: 24px 16px; }
+  }
 
   .wrap{max-width:1180px;margin:0 auto;padding:24px;display:grid;grid-template-columns:1.15fr 1fr;gap:24px;align-items:start;}
   @media(max-width:900px){.wrap{grid-template-columns:1fr;}}
@@ -321,8 +680,19 @@
 
 <footer>
   <div class="kpo">
-    <strong>Sfinansowano ze środków Krajowego Planu Odbudowy (KPO) · Rzeczpospolita Polska · Sfinansowane przez Unię Europejską — NextGenerationEU.</strong>
-    <div class="umowa">Umowa nr 143/KPO.STYPENDIA/NIMIT/2025 · Spatial Audio Lab</div>
+    <div style="margin-bottom:14px;max-width:440px;">
+      <img src="assets/kpo/KPO.jpg" alt="Logotypy Krajowy Plan Odbudowy, flaga Rzeczypospolitej Polskiej, napis Sfinansowane przez Unię Europejską NextGenerationEU oraz flaga Unii Europejskiej" style="width:100%;height:auto;display:block;" />
+    </div>
+    <strong>Projekt sfinansowany przez Unię Europejską — NextGenerationEU.</strong>
+    <div class="umowa" style="line-height:1.6;margin-top:6px;">
+      Wsparcie w ramach Krajowego Planu Odbudowy i Zwiększania Odporności, Inwestycja A2.5.1: Program wspierania działalności podmiotów sektora kultury i przemysłów kreatywnych na rzecz stymulowania ich rozwoju.<br>
+      Instytucja Wspierająca: Narodowy Instytut Muzyki i Tańca (NIMiT) · Umowa nr <strong>143/KPO.STYPENDIA/NIMIT/2025</strong> · Stypendysta: <strong>Oskar Hamerski</strong> · Wartość dofinansowania: <strong>36 000,00 zł brutto</strong>
+    </div>
+    <div style="margin-top:10px;">
+      <a href="https://spatial-audio-lab.github.io/o-projekcie/" target="_blank" rel="noopener" style="color:#007a68;font-weight:600;text-decoration:underline;">
+        Pełne informacje o projekcie (wskaźniki, certyfikaty, kontakt) ↗
+      </a>
+    </div>
   </div>
 </footer>
 
